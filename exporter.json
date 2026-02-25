@@ -1,6 +1,6 @@
 {
-  "id": "io.supernova.documentation-main",
-  "name": "Default Documentation",
+  "id": "usertesting.documentation-main",
+  "name": "Documentation with theme switcher",
   "description": "Default customizable exporter for design system documentation",
   "author": "Supernova",
   "organization": "Supernova",
