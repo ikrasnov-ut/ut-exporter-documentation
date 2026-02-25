@@ -152,7 +152,7 @@
 <script>
   (function () {
     const KEY = 'sn.docs.theme';
-    const STORYBOOK_HOST_FRAGMENT = 'toolkit.usertesting.com/storybook/';
+    const STORYBOOK_IFRAME_MATCH = 'toolkit.usertesting.com/storybook/iframe.html';
 
     function getTheme() {
       return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
@@ -166,48 +166,68 @@
       syncStorybookEmbeds(theme);
     }
 
-    function syncStorybookEmbeds(theme) {
-      const iframes = document.querySelectorAll('iframe[src*="' + STORYBOOK_HOST_FRAGMENT + '"]');
-      iframes.forEach((iframe) => {
-        try {
-          const url = new URL(iframe.src, window.location.href);
+    // Collect elements across document + open shadow roots
+    function collectAll(root, selector) {
+      const out = [];
+      const walk = (node) => {
+        if (!node) return;
 
-          // globals are usually separated by ';' in Storybook
-          const globalsRaw = url.searchParams.get('globals') || '';
-          const parts = globalsRaw ? globalsRaw.split(';').filter(Boolean) : [];
+        // normal DOM
+        if (node.querySelectorAll) out.push(...node.querySelectorAll(selector));
 
-          let replaced = false;
-          for (let i = 0; i < parts.length; i++) {
-            if (parts[i].startsWith('theme:')) {
-              parts[i] = 'theme:' + theme;
-              replaced = true;
-              break;
-            }
-          }
-          if (!replaced) parts.push('theme:' + theme);
-
-          url.searchParams.set('globals', parts.join(';'));
-
-          const next = url.toString();
-          if (iframe.src !== next) {
-            iframe.src = next; // reloads embed with the new theme
-          }
-        } catch (e) {
-          // ignore malformed URLs
+        // recurse into open shadow roots
+        const all = node.querySelectorAll ? node.querySelectorAll('*') : [];
+        for (const el of all) {
+          if (el.shadowRoot) walk(el.shadowRoot);
         }
-      });
+      };
+      walk(root);
+      return out;
+    }
+
+    function setThemeGlobal(urlString, theme) {
+      const url = new URL(urlString, window.location.href);
+
+      const globalsRaw = url.searchParams.get('globals') || '';
+      const parts = globalsRaw ? globalsRaw.split(';').filter(Boolean) : [];
+
+      let hasTheme = false;
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i].startsWith('theme:')) {
+          parts[i] = 'theme:' + theme;
+          hasTheme = true;
+          break;
+        }
+      }
+      if (!hasTheme) parts.push('theme:' + theme);
+
+      url.searchParams.set('globals', parts.join(';'));
+      return url.toString();
+    }
+
+    function syncStorybookEmbeds(theme) {
+      const iframes = collectAll(document, 'iframe');
+
+      for (const iframe of iframes) {
+        const src = iframe.getAttribute('src') || '';
+        if (!src.includes(STORYBOOK_IFRAME_MATCH)) continue;
+
+        const next = setThemeGlobal(src, theme);
+        if (src !== next) {
+          iframe.setAttribute('src', next); // reload with new theme
+        }
+      }
     }
 
     function toggleTheme() {
       applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
     }
 
-    // Wire up button
     document.addEventListener('DOMContentLoaded', function () {
       const btn = document.getElementById('sn-theme-toggle');
       if (btn) btn.addEventListener('click', toggleTheme);
 
-      // Ensure embeds match initial theme on load too
+      // make sure embeds match initial theme
       syncStorybookEmbeds(getTheme());
     });
   })();
