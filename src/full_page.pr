@@ -152,7 +152,6 @@
 <script>
   (function () {
     const KEY = 'sn.docs.theme';
-    const STORYBOOK_IFRAME_MATCH = 'toolkit.usertesting.com/storybook/iframe.html';
 
     function getTheme() {
       return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
@@ -166,56 +165,59 @@
       syncStorybookEmbeds(theme);
     }
 
-    // Collect elements across document + open shadow roots
+    // Traverse normal DOM + open shadow roots
     function collectAll(root, selector) {
       const out = [];
-      const walk = (node) => {
+      const visit = (node) => {
         if (!node) return;
 
-        // normal DOM
-        if (node.querySelectorAll) out.push(...node.querySelectorAll(selector));
-
-        // recurse into open shadow roots
-        const all = node.querySelectorAll ? node.querySelectorAll('*') : [];
-        for (const el of all) {
-          if (el.shadowRoot) walk(el.shadowRoot);
+        if (node.querySelectorAll) {
+          out.push(...node.querySelectorAll(selector));
+          // recurse into shadow roots of descendants
+          for (const el of node.querySelectorAll('*')) {
+            if (el.shadowRoot) visit(el.shadowRoot);
+          }
         }
       };
-      walk(root);
+      visit(root);
       return out;
     }
 
-    function setThemeGlobal(urlString, theme) {
+    function setThemeInGlobals(urlString, theme) {
       const url = new URL(urlString, window.location.href);
 
-      const globalsRaw = url.searchParams.get('globals') || '';
-      const parts = globalsRaw ? globalsRaw.split(';').filter(Boolean) : [];
+      // Storybook "globals" are commonly separated by ';'
+      const raw = url.searchParams.get('globals') || '';
+      const parts = raw ? raw.split(';').filter(Boolean) : [];
 
-      let hasTheme = false;
+      let replaced = false;
       for (let i = 0; i < parts.length; i++) {
         if (parts[i].startsWith('theme:')) {
           parts[i] = 'theme:' + theme;
-          hasTheme = true;
+          replaced = true;
           break;
         }
       }
-      if (!hasTheme) parts.push('theme:' + theme);
+      if (!replaced) parts.push('theme:' + theme);
 
       url.searchParams.set('globals', parts.join(';'));
       return url.toString();
     }
 
+    // Match by path, not hostname
+    function isStorybookIframeSrc(src) {
+      // Your screenshot shows: .../storybook/iframe.html?... (with extra path segments before /storybook)
+      return typeof src === 'string' && src.includes('/storybook/iframe.html');
+    }
+
     function syncStorybookEmbeds(theme) {
       const iframes = collectAll(document, 'iframe');
-
       for (const iframe of iframes) {
         const src = iframe.getAttribute('src') || '';
-        if (!src.includes(STORYBOOK_IFRAME_MATCH)) continue;
+        if (!isStorybookIframeSrc(src)) continue;
 
-        const next = setThemeGlobal(src, theme);
-        if (src !== next) {
-          iframe.setAttribute('src', next); // reload with new theme
-        }
+        const next = setThemeInGlobals(src, theme);
+        if (src !== next) iframe.setAttribute('src', next); // reloads embed
       }
     }
 
@@ -223,12 +225,33 @@
       applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
     }
 
+    // Keep sync’ing as embeds get inserted (incl. inside shadow roots)
+    function observeAndSync() {
+      const run = () => syncStorybookEmbeds(getTheme());
+
+      // Observe document
+      const obs = new MutationObserver(run);
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+
+      // Also periodically resync (cheap + covers edge cases)
+      setTimeout(run, 0);
+      setTimeout(run, 300);
+      setTimeout(run, 1000);
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
       const btn = document.getElementById('sn-theme-toggle');
       if (btn) btn.addEventListener('click', toggleTheme);
 
-      // make sure embeds match initial theme
-      syncStorybookEmbeds(getTheme());
+      // initial apply (if you don't already do it earlier)
+      const stored = localStorage.getItem(KEY);
+      if (stored === 'dark' || stored === 'light') {
+        document.documentElement.dataset.theme = stored;
+        document.body.classList.toggle('theme-dark', stored === 'dark');
+        document.body.classList.toggle('theme-light', stored === 'light');
+      }
+
+      observeAndSync();
     });
   })();
 </script>
