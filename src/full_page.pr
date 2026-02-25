@@ -18,6 +18,22 @@
 {[ const domain = ds.documentationDomain() /]}
 
 <body class="{{ pageIdentifier(page) }}{{ (isHomepage || isHomepageTab) ? " is-homepage" : "" }}">
+
+<script>
+  // Critical: run ASAP to avoid flicker
+  (function () {
+    const KEY = 'sn.docs.theme';
+    const stored = localStorage.getItem(KEY);
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = stored || (prefersDark ? 'dark' : 'light');
+
+    // Use data-theme for CSS + add helper class
+    document.documentElement.dataset.theme = theme;
+    document.body.classList.toggle('theme-dark', theme === 'dark');
+    document.body.classList.toggle('theme-light', theme === 'light');
+  })();
+</script>
+
 {* <body class="{{ exportConfiguration().defaultVisualMode }}"> *}
 {* {[ if exportConfiguration().showVisualModeSwitch ]} - hard-disabled for now, until full customization is in place *}
 {[ if false ]}
@@ -103,6 +119,30 @@
       </div> {* .site-content-wrapper end *}
     </div> {* .site-wrapper end *}
   </div>
+
+  <button id="sn-theme-toggle" class="sn-theme-toggle" type="button" aria-label="Toggle theme">
+    Theme
+  </button>
+
+  <style>
+    /* Minimal styling; adjust to match your UI */
+    .sn-theme-toggle{
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 9999;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,.15);
+      background: white;
+      cursor: pointer;
+    }
+    html[data-theme="dark"] .sn-theme-toggle{
+      background: #111;
+      color: white;
+      border-color: rgba(255,255,255,.2);
+    }
+  </style>
   
 </div>
 <!-- .site end --> 
