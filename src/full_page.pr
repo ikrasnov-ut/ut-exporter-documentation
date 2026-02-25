@@ -148,6 +148,71 @@
 <!-- .site end --> 
 
 <!-- JavaScript -->
+
+<script>
+  (function () {
+    const KEY = 'sn.docs.theme';
+    const STORYBOOK_HOST_FRAGMENT = 'toolkit.usertesting.com/storybook/';
+
+    function getTheme() {
+      return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      document.body.classList.toggle('theme-dark', theme === 'dark');
+      document.body.classList.toggle('theme-light', theme === 'light');
+      localStorage.setItem(KEY, theme);
+      syncStorybookEmbeds(theme);
+    }
+
+    function syncStorybookEmbeds(theme) {
+      const iframes = document.querySelectorAll('iframe[src*="' + STORYBOOK_HOST_FRAGMENT + '"]');
+      iframes.forEach((iframe) => {
+        try {
+          const url = new URL(iframe.src, window.location.href);
+
+          // globals are usually separated by ';' in Storybook
+          const globalsRaw = url.searchParams.get('globals') || '';
+          const parts = globalsRaw ? globalsRaw.split(';').filter(Boolean) : [];
+
+          let replaced = false;
+          for (let i = 0; i < parts.length; i++) {
+            if (parts[i].startsWith('theme:')) {
+              parts[i] = 'theme:' + theme;
+              replaced = true;
+              break;
+            }
+          }
+          if (!replaced) parts.push('theme:' + theme);
+
+          url.searchParams.set('globals', parts.join(';'));
+
+          const next = url.toString();
+          if (iframe.src !== next) {
+            iframe.src = next; // reloads embed with the new theme
+          }
+        } catch (e) {
+          // ignore malformed URLs
+        }
+      });
+    }
+
+    function toggleTheme() {
+      applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+    }
+
+    // Wire up button
+    document.addEventListener('DOMContentLoaded', function () {
+      const btn = document.getElementById('sn-theme-toggle');
+      if (btn) btn.addEventListener('click', toggleTheme);
+
+      // Ensure embeds match initial theme on load too
+      syncStorybookEmbeds(getTheme());
+    });
+  })();
+</script>
+
 {[ inject "page_body_scripts" context page /]}
 
 </body>
